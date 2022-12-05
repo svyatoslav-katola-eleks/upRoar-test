@@ -9,7 +9,7 @@ struct PlayerQueueView: View {
         GeometryReader { proxy in
             TabView(selection: $viewModel.currentIndex, content: {
                 ForEach(Array(viewModel.displayedItems.enumerated()), id: \.offset) { index, post in
-                    VideoPlayer(player: post.player)
+                    PlayerView(player: post.player)
                         .aspectRatio(contentMode: .fill)
                         .tag(index)
                 }
@@ -32,5 +32,22 @@ struct PlayerQueueView: View {
         .background(ProgressView().scaleEffect(2))
         .ignoresSafeArea()
         .onAppear(perform: viewModel.onAppear)
+    }
+}
+
+struct PlayerView: View {
+    
+    var player: AVPlayer?
+    
+    var body: some View {
+        ZStack {
+            VideoPlayer(player: player)
+            
+            VStack {
+                Spacer()
+                ProgressView()
+                    .offset(y: 30)
+            }
+        }
     }
 }

@@ -1,7 +1,7 @@
 import Combine
 import AVKit
 
-final class ViewModel: ObservableObject {
+final class PlayerQueueViewModel: ObservableObject {
     
     // these values affects app performance
     enum Constants {
@@ -150,7 +150,7 @@ final class ViewModel: ObservableObject {
     }
 }
 
-extension ViewModel: CachingPlayerItemDelegate {
+extension PlayerQueueViewModel: CachingPlayerItemDelegate {
     
     func playerItem(_ playerItem: CachingPlayerItem, didFinishDownloadingData data: Data) {
         cache.cacheItem(data, forKey: playerItem.url.absoluteString, item: playerItem)

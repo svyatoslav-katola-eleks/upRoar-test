@@ -3,10 +3,11 @@ import AVKit
 
 final class PlayerQueueViewModel: ObservableObject {
     
-    // these values affects app performance
+    // These constants might affect app performance
     enum Constants {
-        static let maximumItemsInBuffering: Int = 9
-        static let maximumItemsCached: Int = 5
+        static let maximumItemsInBuffering: Int = 10
+        static let maximumItemsCached: Int = 20
+        static let playersWorkingRange: Int = 5
     }
     
     @Published var displayedItems: [VideoItem] = []
@@ -87,27 +88,16 @@ final class PlayerQueueViewModel: ObservableObject {
             prepare(item: videoItem)
         }
     }
-    
+        
     func onPageUpdate(index: Int) {
         loadMoreIfNeeded()
-        
-        // free up cached items if needed
-        let itemsToLoop = index - Constants.maximumItemsCached
-        if itemsToLoop > 0 {
-            for cachedItemIndex in 0 ..< itemsToLoop {
-                displayedItems[cachedItemIndex].player?.replaceCurrentItem(with: nil)
-                displayedItems[cachedItemIndex].player = nil
-                cache.removeObject(
-                    forKey: displayedItems[cachedItemIndex].url.absoluteString
-                )
-            }
-        }
+        clearCacheIfNeeded()
                 
         guard index < displayedItems.count else {
             return
         }
         
-        // if item was already removed from cache, need to download (when scrolling back)
+        // If item was already removed from cache, need to download (when scrolling back)
         if displayedItems[index].player == nil {
             let item = resolveItem(for: displayedItems[index].url)
             displayedItems[index].player = AVPlayer(playerItem: item)
@@ -116,12 +106,12 @@ final class PlayerQueueViewModel: ObservableObject {
         displayedItems[index].player?.seek(to: .zero)
         displayedItems[index].player?.play()
 
-        // if there is previous video, we pause it
+        // If there is previous video, we pause it
         if index > 0 {
             displayedItems[index - 1].player?.pause()
         }
 
-        // if there is next video, we pause it
+        // If there is next video, we pause it
         if index + 1 < displayedItems.count {
             displayedItems[index + 1].player?.pause()
         }
@@ -146,6 +136,36 @@ final class PlayerQueueViewModel: ObservableObject {
             let item = CachingPlayerItem.init(url: url, customFileExtension: "mp4")
             item.download()
             return item
+        }
+    }
+    
+    private func clearCacheIfNeeded() {
+        // Remove cached items
+        let cachedItemsToClear = currentIndex - Constants.maximumItemsCached
+        if cachedItemsToClear > 0 {
+            for cachedItemIndex in 0 ..< cachedItemsToClear {
+                cache.removeObject(
+                    forKey: displayedItems[cachedItemIndex].url.absoluteString
+                )
+            }
+        }
+        
+        // Clear player instances that are not in working range
+        let nextPlayersToClear = currentIndex - Constants.playersWorkingRange
+        if nextPlayersToClear > 0 {
+            for cachedItemIndex in 0 ..< nextPlayersToClear {
+                displayedItems[cachedItemIndex].player?.replaceCurrentItem(with: nil)
+                displayedItems[cachedItemIndex].player = nil
+            }
+        }
+        
+        // Clear player instances that are not in working range
+        let previousPlayersToClear = currentIndex + Constants.playersWorkingRange
+        if previousPlayersToClear < displayedItems.count {
+            for cachedItemIndex in previousPlayersToClear ..< displayedItems.count {
+                displayedItems[cachedItemIndex].player?.replaceCurrentItem(with: nil)
+                displayedItems[cachedItemIndex].player = nil
+            }
         }
     }
 }

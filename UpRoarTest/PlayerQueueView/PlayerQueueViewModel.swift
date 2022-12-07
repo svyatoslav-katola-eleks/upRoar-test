@@ -18,22 +18,15 @@ final class PlayerQueueViewModel: ObservableObject {
     
     private let cache = MediaCache()
     private let dataSource = VideosDataSource()
-    private let processItemsQueue: OperationQueue = {
-       let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = 1
-        queue.qualityOfService = .userInitiated
-        return queue
-    }()
+    
+    private var cachedItemsSubject = PassthroughSubject<CachingPlayerItem, Never>()
     
     func onAppear() {
-        loadMoreIfNeeded()
-        
         $currentIndex
             .sink(receiveValue: onPageUpdate)
             .store(in: &cancellable)
         
-        cache
-            .readyToPlayItems
+        cachedItemsSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] item in
                 guard let self else { return }
@@ -75,7 +68,7 @@ final class PlayerQueueViewModel: ObservableObject {
             return
         }
         
-        processItemsQueue.addOperation(BlockOperation(block: loadMore))
+        loadMore()
     }
     
     func loadMore() {
@@ -97,10 +90,13 @@ final class PlayerQueueViewModel: ObservableObject {
             return
         }
         
-        // If item was already removed from cache, need to download (when scrolling back)
+        // If item was already removed from cache, need to load it
         if displayedItems[index].player == nil {
-            let item = resolveItem(for: displayedItems[index].url)
-            displayedItems[index].player = AVPlayer(playerItem: item)
+            Task {
+                let item = await resolveItem(for: displayedItems[index].url)
+                let player = AVPlayer(playerItem: item)
+                await MainActor.run { displayedItems[index].player = player }
+            }
         }
 
         displayedItems[index].player?.seek(to: .zero)
@@ -118,19 +114,22 @@ final class PlayerQueueViewModel: ObservableObject {
     }
 
     private func prepare(item: VideoItem) {
-        let playerItem: CachingPlayerItem = resolveItem(for: item.url)
-        var item: VideoItem = .init(url: item.url)
-        item.player = .init(playerItem: playerItem)
-        item.player?.automaticallyWaitsToMinimizeStalling = false
-        playerItem.delegate = self
-        
-        pendingItems.append(item)
+        Task {
+            let playerItem: CachingPlayerItem = await resolveItem(for: item.url)
+            playerItem.delegate = self
+            
+            let player = AVPlayer(playerItem: playerItem)
+            player.automaticallyWaitsToMinimizeStalling = false
+            
+            let item = VideoItem(url: item.url, player: player)
+            pendingItems.append(item)
+        }
     }
     
-    private func resolveItem(for url: URL) -> CachingPlayerItem {
+    private func resolveItem(for url: URL) async -> CachingPlayerItem {
         let key = url.absoluteString
         
-        if let videoData = cache.getItem(forKey: key) {
+        if let videoData = await cache.getItem(forKey: key) {
             return CachingPlayerItem(data: videoData as Data, mimeType: "video/mp4", fileExtension: "mp4")
         } else {
             let item = CachingPlayerItem.init(url: url, customFileExtension: "mp4")
@@ -144,9 +143,11 @@ final class PlayerQueueViewModel: ObservableObject {
         let cachedItemsToClear = currentIndex - Constants.maximumItemsCached
         if cachedItemsToClear > 0 {
             for cachedItemIndex in 0 ..< cachedItemsToClear {
-                cache.removeObject(
-                    forKey: displayedItems[cachedItemIndex].url.absoluteString
-                )
+                Task {
+                    await cache.removeObject(
+                        forKey: displayedItems[cachedItemIndex].url.absoluteString
+                    )
+                }
             }
         }
         
@@ -173,6 +174,9 @@ final class PlayerQueueViewModel: ObservableObject {
 extension PlayerQueueViewModel: CachingPlayerItemDelegate {
     
     func playerItem(_ playerItem: CachingPlayerItem, didFinishDownloadingData data: Data) {
-        cache.cacheItem(data, forKey: playerItem.url.absoluteString, item: playerItem)
+        Task {
+            await cache.cacheItem(data, forKey: playerItem.url.absoluteString, item: playerItem)
+            cachedItemsSubject.send(playerItem)
+        }
     }
 }

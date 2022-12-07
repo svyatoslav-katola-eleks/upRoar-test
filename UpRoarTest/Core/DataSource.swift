@@ -47,7 +47,8 @@ struct VideoItem: Identifiable {
     let url: URL
     var player: AVPlayer?
     
-    init(url: URL) {
+    init(url: URL, player: AVPlayer? = nil) {
         self.url = url
+        self.player = player
     }
 }

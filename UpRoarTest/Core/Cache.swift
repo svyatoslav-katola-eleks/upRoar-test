@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-actor MediaCache {
+final actor MediaCache {
     
     private let cache = NSCache<NSString, NSData>()
 

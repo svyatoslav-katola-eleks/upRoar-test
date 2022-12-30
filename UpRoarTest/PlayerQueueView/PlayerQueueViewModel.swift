@@ -14,7 +14,7 @@ final class PlayerQueueViewModel: ObservableObject {
     @Published var currentIndex: Int = 0
     
     private var pendingItems: [VideoItem] = []
-    private var cancellable: [AnyCancellable] = []
+    private var cancellable = Set<AnyCancellable>()
     
     private let cache = MediaCache()
     private let dataSource = VideosDataSource()
@@ -39,8 +39,6 @@ final class PlayerQueueViewModel: ObservableObject {
                         self.displayedItems.first?.player?.play()
                     }
                 }
-                
-                self.loadMoreIfNeeded()
             }
             .store(in: &cancellable)
         
@@ -57,31 +55,6 @@ final class PlayerQueueViewModel: ObservableObject {
             .store(in: &cancellable)
     }
 
-    func loadMoreIfNeeded() {
-        // Prevent new loadings when currently buffering maximum
-        guard pendingItems.count < Constants.maximumItemsInBuffering else {
-            return
-        }
-        
-        // Prevent new loadings when current index is not in working range of displayed items
-        guard currentIndex + Constants.maximumItemsInBuffering > displayedItems.count else {
-            return
-        }
-        
-        loadMore()
-    }
-    
-    func loadMore() {
-        let itemsToLoad = dataSource.getData(
-            offset: displayedItems.count + pendingItems.count,
-            length: Constants.maximumItemsInBuffering - pendingItems.count
-        )
-        
-        itemsToLoad.forEach { videoItem in
-            prepare(item: videoItem)
-        }
-    }
-        
     func onPageUpdate(index: Int) {
         loadMoreIfNeeded()
         clearCacheIfNeeded()
@@ -113,6 +86,31 @@ final class PlayerQueueViewModel: ObservableObject {
         }
     }
 
+    private func loadMoreIfNeeded() {
+        // Prevent new loadings when currently buffering maximum
+        guard pendingItems.count < Constants.maximumItemsInBuffering else {
+            return
+        }
+        
+        // Prevent new loadings when current index is not in working range of displayed items
+        guard currentIndex + Constants.maximumItemsInBuffering > displayedItems.count else {
+            return
+        }
+        
+        loadMore()
+    }
+    
+    private func loadMore() {
+        let itemsToLoad = dataSource.getData(
+            offset: displayedItems.count + pendingItems.count,
+            length: Constants.maximumItemsInBuffering - pendingItems.count
+        )
+        
+        itemsToLoad.forEach { videoItem in
+            prepare(item: videoItem)
+        }
+    }
+        
     private func prepare(item: VideoItem) {
         Task {
             let playerItem: CachingPlayerItem = await resolveItem(for: item.url)

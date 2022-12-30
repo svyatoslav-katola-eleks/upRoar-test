@@ -3,7 +3,7 @@ import AVKit
 
 struct PlayerQueueView: View {
     
-    @ObservedObject var viewModel: PlayerQueueViewModel = .init()
+    @StateObject var viewModel: PlayerQueueViewModel = .init()
     
     var body: some View {
         GeometryReader { proxy in
